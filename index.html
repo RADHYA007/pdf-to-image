@@ -1,6 +1,83 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- Google Site Verification -->
+    <meta name="google-site-verification" content="3S2LouVpWkZkygO6lYyXqvwaK5gcdEISBqovT23qvBQ" />
+
+    <!-- Basic Meta -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- SEO Title -->
+    <title>PDF to Image Converter – Free Online PDF to JPG & PNG Tool</title>
+
+    <!-- SEO Description -->
+    <meta name="description" content="Convert PDF files to high quality JPG or PNG images online for free. Fast, secure, client-side PDF to Image converter with no uploads." />
+
+    <!-- SEO Keywords -->
+    <meta name="keywords" content="pdf to image, pdf to jpg, pdf to png, convert pdf to image online, free pdf converter" />
+
+    <!-- Author -->
+    <meta name="author" content="Radhya007">
+
+    <!-- Open Graph (for Google & Social Preview) -->
+    <meta property="og:title" content="PDF to Image Converter – Free Online Tool" />
+    <meta property="og:description" content="Convert PDF to JPG or PNG instantly. Fast, secure, no upload required." />
+    <meta property="og:url" content="https://radhya007.github.io/pdf-to-image/" />
+    <meta property="og:type" content="website" />
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc =
+            'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+
+    <!-- JSZip -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Custom Styles -->
+    <style>
+        .drop-active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF to Image Converter</title>
