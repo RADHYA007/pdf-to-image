@@ -78,53 +78,6 @@
     </style>
 </head>
 
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PDF to Image Converter</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-    <script>
-        // Set up PDF.js worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    </script>
-    <style>
-        .drop-active {
-            border-color: #3b82f6;
-            background-color: #eff6ff;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-        /* Loader animation */
-        .loader {
-            border: 3px solid #f3f3f3;
-            border-radius: 50%;
-            border-top: 3px solid #3b82f6;
-            width: 24px;
-            height: 24px;
-            -webkit-animation: spin 1s linear infinite; /* Safari */
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-</head>
 <body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
 
     <!-- Navbar -->
@@ -138,7 +91,7 @@
                     <span class="font-bold text-xl tracking-tight text-gray-900">PDF to Image</span>
                 </div>
                 <div class="text-sm text-gray-500 hidden sm:block">
-                    Client-side Secure Conversion
+                    Fast Parallel Conversion
                 </div>
             </div>
         </div>
@@ -152,8 +105,8 @@
             <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
                 <h1 class="text-3xl font-bold text-gray-900 mb-4">Convert PDF to JPG/PNG</h1>
                 <p class="text-gray-600 mb-8 max-w-2xl mx-auto">
-                    Transform your PDF documents into high-quality images in seconds. 
-                    <br>Supports large files up to 1GB. All processing happens in your browser for privacy.
+                    Transform your PDF documents into high-quality images. 
+                    <br><strong>Optimized for Speed:</strong> Parallel processing for large files up to 1GB.
                 </p>
 
                 <!-- Drop Zone -->
@@ -232,13 +185,13 @@
             <!-- Progress Section -->
             <div id="progress-container" class="hidden bg-white rounded-xl p-6 shadow-sm border border-gray-200">
                 <div class="flex justify-between mb-2">
-                    <span id="progress-text" class="text-sm font-medium text-blue-700">Processing page 1...</span>
+                    <span id="progress-text" class="text-sm font-medium text-blue-700">Starting...</span>
                     <span id="progress-percent" class="text-sm font-medium text-blue-700">0%</span>
                 </div>
                 <div class="w-full bg-gray-200 rounded-full h-2.5">
                     <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
-                <p class="text-xs text-gray-500 mt-2 italic">For large files, this might take a moment. Please don't close the tab.</p>
+                <p class="text-xs text-gray-500 mt-2 italic">Processing multiple pages in parallel for speed...</p>
             </div>
 
             <!-- Download All Action -->
@@ -269,8 +222,7 @@
         </div>
     </footer>
 
-    <!-- Hidden canvas for rendering -->
-    <canvas id="render-canvas" class="hidden"></canvas>
+    <!-- Hidden canvas for rendering (removed single canvas, now created dynamically) -->
 
     <script>
         // State
@@ -278,9 +230,11 @@
         let pdfDoc = null;
         let currentFormat = 'jpeg';
         let isConverting = false;
-        let conversionQueue = [];
         let zip = new JSZip();
         let cancelConversion = false;
+        
+        // Configuration
+        const CONCURRENCY = 3; // Number of pages to convert at the same time
 
         // Elements
         const dropZone = document.getElementById('drop-zone');
@@ -298,10 +252,8 @@
         const progressBar = document.getElementById('progress-bar');
         const progressText = document.getElementById('progress-text');
         const progressPercent = document.getElementById('progress-percent');
-        const renderCanvas = document.getElementById('render-canvas');
         const downloadAllContainer = document.getElementById('download-all-container');
         const downloadZipBtn = document.getElementById('download-zip-btn');
-        const ctx = renderCanvas.getContext('2d');
 
         // Drag & Drop
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -413,14 +365,14 @@
                 div.innerHTML = `
                     <div class="w-full aspect-[1/1.4] bg-gray-100 rounded mb-3 flex items-center justify-center relative overflow-hidden group">
                         <span class="text-gray-400 font-medium">Page ${i}</span>
-                        <img id="img-preview-${i}" class="absolute inset-0 w-full h-full object-contain hidden" />
+                        <img id="img-preview-${i}" class="absolute inset-0 w-full h-full object-contain hidden transition-opacity duration-300" />
                         <div id="loader-${i}" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center">
                             <div class="loader"></div>
                         </div>
                     </div>
                     <div class="w-full flex justify-between items-center px-1">
                         <span class="text-xs font-semibold text-gray-500">Page ${i}</span>
-                        <button disabled id="dl-btn-${i}" class="text-gray-300 text-xs hover:text-blue-600 transition-colors" onclick="downloadSingle(${i})">
+                        <button disabled id="dl-btn-${i}" class="text-gray-300 text-xs hover:text-blue-600 transition-colors">
                             <i class="fa-solid fa-download"></i>
                         </button>
                     </div>
@@ -450,69 +402,42 @@
 
             const scale = parseFloat(document.getElementById('scale-select').value);
             const totalPages = pdfDoc.numPages;
+            let processedCount = 0;
 
-            for (let i = 1; i <= totalPages; i++) {
-                if (cancelConversion) {
-                    break;
+            // Prepare Queue
+            const pagesQueue = Array.from({length: totalPages}, (_, i) => i + 1);
+
+            // Worker Loop
+            const processQueue = async () => {
+                while (pagesQueue.length > 0 && !cancelConversion) {
+                    const pageNum = pagesQueue.shift();
+                    
+                    // Show spinner for this page
+                    const loader = document.getElementById(`loader-${pageNum}`);
+                    if(loader) loader.classList.remove('hidden');
+
+                    try {
+                        await processPage(pageNum, scale);
+                        processedCount++;
+                        updateProgress(processedCount, totalPages);
+                    } catch (err) {
+                        console.error(`Error processing page ${pageNum}:`, err);
+                        // Optionally hide loader if error
+                        if(loader) loader.classList.add('hidden');
+                    }
                 }
+            };
 
-                updateProgress(i, totalPages);
-                
-                // Show loader on card
-                document.getElementById(`loader-${i}`).classList.remove('hidden');
-
-                try {
-                    const page = await pdfDoc.getPage(i);
-                    const viewport = page.getViewport({ scale: scale });
-                    
-                    renderCanvas.height = viewport.height;
-                    renderCanvas.width = viewport.width;
-
-                    const renderContext = {
-                        canvasContext: ctx,
-                        viewport: viewport
-                    };
-
-                    await page.render(renderContext).promise;
-
-                    // Convert to Blob
-                    const quality = currentFormat === 'jpeg' ? 0.85 : 1.0;
-                    const mimeType = currentFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
-                    
-                    const blob = await new Promise(resolve => renderCanvas.toBlob(resolve, mimeType, quality));
-                    const dataUrl = renderCanvas.toDataURL(mimeType, quality);
-
-                    // Add to Zip
-                    const ext = currentFormat === 'jpeg' ? 'jpg' : 'png';
-                    // Use padStart for better sorting in file explorer (page_01, page_02, etc.)
-                    const pageNum = String(i).padStart(3, '0'); 
-                    const filename = `${currentFile.name.replace(/\.pdf$/i, '')}_page_${pageNum}.${ext}`;
-                    
-                    // Add file to zip
-                    zip.file(filename, blob);
-
-                    // Update UI Preview
-                    const imgEl = document.getElementById(`img-preview-${i}`);
-                    imgEl.src = dataUrl;
-                    imgEl.classList.remove('hidden');
-                    document.getElementById(`loader-${i}`).classList.add('hidden');
-
-                    // Enable single download
-                    const dlBtn = document.getElementById(`dl-btn-${i}`);
-                    dlBtn.disabled = false;
-                    dlBtn.classList.remove('text-gray-300');
-                    dlBtn.classList.add('text-gray-600', 'cursor-pointer');
-                    // Store blob for single download
-                    dlBtn.onclick = () => saveAs(blob, filename);
-                    
-                    // Release memory explicitly if possible for page
-                    page.cleanup();
-
-                } catch (err) {
-                    console.error(`Error rendering page ${i}:`, err);
-                }
+            // Launch Workers (Parallel Execution)
+            const workers = [];
+            const numWorkers = Math.min(CONCURRENCY, totalPages);
+            for (let i = 0; i < numWorkers; i++) {
+                workers.push(processQueue());
             }
 
+            await Promise.all(workers);
+
+            // Cleanup & Finish
             isConverting = false;
             cancelBtn.classList.add('hidden');
             convertBtn.classList.remove('hidden');
@@ -521,11 +446,76 @@
             if (!cancelConversion) {
                 progressText.textContent = "Conversion Complete!";
                 downloadAllContainer.classList.remove('hidden');
-                // Scroll to download button
                 downloadAllContainer.scrollIntoView({ behavior: 'smooth' });
             } else {
                 progressText.textContent = "Conversion Cancelled.";
             }
+        }
+
+        async function processPage(pageNum, scale) {
+             // Create dynamic canvas (crucial for parallel processing)
+             const tempCanvas = document.createElement('canvas');
+             const tempCtx = tempCanvas.getContext('2d');
+             
+             const page = await pdfDoc.getPage(pageNum);
+             const viewport = page.getViewport({ scale: scale });
+             
+             tempCanvas.height = viewport.height;
+             tempCanvas.width = viewport.width;
+
+             const renderContext = {
+                 canvasContext: tempCtx,
+                 viewport: viewport
+             };
+
+             // Render PDF page to canvas
+             await page.render(renderContext).promise;
+
+             // Convert to Blob
+             const quality = currentFormat === 'jpeg' ? 0.8 : 1.0; 
+             const mimeType = currentFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+             
+             const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, mimeType, quality));
+             
+             // Optimization: Use Blob URL for preview instead of DataURL (Base64)
+             // Base64 freezes UI on large images; Blob URL does not.
+             const previewUrl = URL.createObjectURL(blob);
+
+             // Add to Zip
+             const ext = currentFormat === 'jpeg' ? 'jpg' : 'png';
+             const pageNumStr = String(pageNum).padStart(3, '0');
+             const filename = `${currentFile.name.replace(/\.pdf$/i, '')}_page_${pageNumStr}.${ext}`;
+             
+             zip.file(filename, blob);
+
+             // Update UI for this page
+             if (!cancelConversion) {
+                 const imgEl = document.getElementById(`img-preview-${pageNum}`);
+                 const loader = document.getElementById(`loader-${pageNum}`);
+                 const dlBtn = document.getElementById(`dl-btn-${pageNum}`);
+                 
+                 if(imgEl) {
+                     imgEl.onload = () => { URL.revokeObjectURL(imgEl.src); }; // Cleanup previous if any
+                     imgEl.src = previewUrl;
+                     imgEl.classList.remove('hidden');
+                 }
+                 if(loader) loader.classList.add('hidden');
+                 
+                 if(dlBtn) {
+                     dlBtn.disabled = false;
+                     dlBtn.classList.remove('text-gray-300');
+                     dlBtn.classList.add('text-gray-600', 'cursor-pointer');
+                     // Note: We need to clone the blob or create a new object URL for download if we revoke the previous one too early.
+                     // A safe bet here is just using the generic saveAs helper which creates a fresh URL.
+                     dlBtn.onclick = () => saveAs(blob, filename);
+                 }
+             }
+
+             // Clean up memory
+             page.cleanup();
+             tempCanvas.width = 0; 
+             tempCanvas.height = 0;
+             tempCanvas.remove();
         }
 
         function updateProgress(current, total) {
@@ -563,10 +553,6 @@
                 btn.classList.remove('opacity-75', 'cursor-wait');
                 btn.innerHTML = originalContent;
             }
-        }
-
-        function downloadSingle(pageIndex) {
-            // Logic handled in the loop closure, but fallback here if needed
         }
 
         // Helper: Save Blob
