@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to Image Converter</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        // Set up PDF.js worker
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+    <style>
+        .drop-active {
+            border-color: #3b82f6;
+            background-color: #eff6ff;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        /* Loader animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3">
+                    <div class="bg-blue-600 text-white p-2 rounded-lg shadow-sm">
+                        <i class="fa-solid fa-file-pdf text-xl"></i>
+                    </div>
+                    <span class="font-bold text-xl tracking-tight text-gray-900">PDF to Image</span>
+                </div>
+                <div class="text-sm text-gray-500 hidden sm:block">
+                    Fast Parallel Conversion
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-5xl">
+        
+        <!-- Upload Section -->
+        <div id="upload-section" class="mb-8 transition-all duration-300">
+            <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 text-center">
+                <h1 class="text-3xl font-bold text-gray-900 mb-4">Convert PDF to JPG/PNG</h1>
+                <p class="text-gray-600 mb-8 max-w-2xl mx-auto">
+                    Transform your PDF documents into high-quality images. 
+                    <br><strong>Optimized for Speed:</strong> Parallel processing for large files up to 1GB.
+                </p>
+
+                <!-- Drop Zone -->
+                <div id="drop-zone" 
+                     class="border-2 border-dashed border-gray-300 rounded-xl p-10 cursor-pointer transition-all duration-200 hover:border-blue-500 hover:bg-blue-50 group">
+                    <input type="file" id="file-input" class="hidden" accept="application/pdf">
+                    
+                    <div class="flex flex-col items-center justify-center gap-4">
+                        <div class="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform duration-200">
+                            <i class="fa-solid fa-cloud-arrow-up text-3xl"></i>
+                        </div>
+                        <div>
+                            <p class="text-lg font-semibold text-gray-700">Click to upload or drag and drop</p>
+                            <p class="text-sm text-gray-500 mt-1">PDF files only (Max 1GB)</p>
+                        </div>
+                        <button class="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-colors mt-2">
+                            Select PDF File
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Processing UI (Hidden by default) -->
+        <div id="processing-ui" class="hidden space-y-6">
+            
+            <!-- File Info & Settings Card -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <div class="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div class="flex items-center gap-4 overflow-hidden">
+                        <div class="w-12 h-12 flex-shrink-0 bg-red-100 text-red-600 rounded-lg flex items-center justify-center">
+                            <i class="fa-solid fa-file-pdf text-xl"></i>
+                        </div>
+                        <div class="min-w-0">
+                            <h3 id="file-name" class="font-bold text-gray-900 truncate">document.pdf</h3>
+                            <p class="text-sm text-gray-500"><span id="file-size">0 MB</span> • <span id="page-count">0 pages</span></p>
+                        </div>
+                    </div>
+                    <button id="reset-btn" class="text-gray-500 hover:text-red-600 text-sm font-medium flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                        <i class="fa-solid fa-trash"></i> Remove
+                    </button>
+                </div>
+
+                <div class="p-6 bg-gray-50 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <!-- Settings -->
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">Image Format</label>
+                        <div class="flex bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
+                            <button id="fmt-jpg" class="flex-1 py-1.5 text-sm font-medium rounded-md bg-blue-600 text-white shadow-sm transition-all" onclick="setFormat('jpeg')">JPG</button>
+                            <button id="fmt-png" class="flex-1 py-1.5 text-sm font-medium rounded-md text-gray-600 hover:bg-gray-100 transition-all" onclick="setFormat('png')">PNG</button>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <label class="block text-sm font-semibold text-gray-700">Quality / Scale</label>
+                        <select id="scale-select" class="w-full bg-white border border-gray-300 text-gray-700 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-2.5">
+                            <option value="1">Standard (72 DPI)</option>
+                            <option value="1.5">High (108 DPI)</option>
+                            <option value="2" selected>Very High (144 DPI)</option>
+                            <option value="3">Print (216 DPI) - Slow</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-end">
+                        <button id="convert-btn" class="w-full px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-lg shadow-blue-200 transition-all active:scale-95 flex items-center justify-center gap-2">
+                            <span>Convert All Pages</span>
+                            <i class="fa-solid fa-bolt"></i>
+                        </button>
+                        <button id="cancel-btn" class="hidden w-full px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg shadow-lg transition-all flex items-center justify-center gap-2">
+                            <span>Cancel</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Progress Section -->
+            <div id="progress-container" class="hidden bg-white rounded-xl p-6 shadow-sm border border-gray-200">
+                <div class="flex justify-between mb-2">
+                    <span id="progress-text" class="text-sm font-medium text-blue-700">Starting...</span>
+                    <span id="progress-percent" class="text-sm font-medium text-blue-700">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2.5">
+                    <div id="progress-bar" class="bg-blue-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p class="text-xs text-gray-500 mt-2 italic">Processing multiple pages in parallel for speed...</p>
+            </div>
+
+            <!-- Download All Action -->
+            <div id="download-all-container" class="hidden">
+                 <button id="download-zip-btn" class="w-full md:w-auto px-8 py-4 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl shadow-lg shadow-green-200 transition-all flex items-center justify-center gap-3 text-lg mx-auto transform hover:-translate-y-1">
+                    <i class="fa-solid fa-file-zipper"></i>
+                    Download All Images (ZIP)
+                </button>
+                <p class="text-center text-xs text-gray-400 mt-3">
+                    <i class="fa-solid fa-circle-info"></i> For 1GB+ files, ensure you have free RAM.
+                </p>
+            </div>
+
+            <!-- Preview Grid -->
+            <div class="space-y-4">
+                <h3 class="text-lg font-bold text-gray-900 border-b pb-2">Page Previews</h3>
+                <div id="preview-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                    <!-- Previews injected here -->
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <footer class="bg-white border-t border-gray-200 mt-auto py-6">
+        <div class="container mx-auto px-4 text-center text-gray-500 text-sm">
+            &copy; 2024 PDF to Image Converter. Secure & Client-side.
+        </div>
+    </footer>
+
+    <!-- Hidden canvas for rendering (removed single canvas, now created dynamically) -->
+
+    <script>
+        // State
+        let currentFile = null;
+        let pdfDoc = null;
+        let currentFormat = 'jpeg';
+        let isConverting = false;
+        let zip = new JSZip();
+        let cancelConversion = false;
+        
+        // Configuration
+        const CONCURRENCY = 3; // Number of pages to convert at the same time
+
+        // Elements
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const uploadSection = document.getElementById('upload-section');
+        const processingUi = document.getElementById('processing-ui');
+        const fileNameEl = document.getElementById('file-name');
+        const fileSizeEl = document.getElementById('file-size');
+        const pageCountEl = document.getElementById('page-count');
+        const previewGrid = document.getElementById('preview-grid');
+        const convertBtn = document.getElementById('convert-btn');
+        const cancelBtn = document.getElementById('cancel-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const progressText = document.getElementById('progress-text');
+        const progressPercent = document.getElementById('progress-percent');
+        const downloadAllContainer = document.getElementById('download-all-container');
+        const downloadZipBtn = document.getElementById('download-zip-btn');
+
+        // Drag & Drop
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, highlight, false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, unhighlight, false);
+        });
+
+        function highlight(e) {
+            dropZone.classList.add('drop-active');
+        }
+
+        function unhighlight(e) {
+            dropZone.classList.remove('drop-active');
+        }
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        dropZone.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', handleFiles);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles({ target: { files: files } });
+        }
+
+        async function handleFiles(e) {
+            const files = e.target.files;
+            if (files.length === 0) return;
+            
+            const file = files[0];
+            if (file.type !== 'application/pdf') {
+                alert('Please upload a valid PDF file.');
+                return;
+            }
+
+            currentFile = file;
+            resetUI();
+            
+            // Show processing UI
+            uploadSection.classList.add('hidden');
+            processingUi.classList.remove('hidden');
+
+            // Update Info
+            fileNameEl.textContent = file.name;
+            fileSizeEl.textContent = formatBytes(file.size);
+            
+            // Load PDF
+            try {
+                // Critical for large files: Use createObjectURL instead of reading array buffer
+                const fileUrl = URL.createObjectURL(file);
+                
+                const loadingTask = pdfjsLib.getDocument(fileUrl);
+                loadingTask.onProgress = function(p) {
+                    if(p.total > 0) {
+                        const percent = Math.round((p.loaded / p.total) * 100);
+                        // Optional: Show loading percentage if needed
+                    }
+                };
+
+                pdfDoc = await loadingTask.promise;
+                pageCountEl.textContent = `${pdfDoc.numPages} Pages`;
+                
+                // Generate initial placeholders
+                generatePlaceholders(pdfDoc.numPages);
+                
+            } catch (error) {
+                console.error("Error loading PDF:", error);
+                alert('Error loading PDF. The file might be corrupted or password protected.');
+                resetApp();
+            }
+        }
+
+        // Format Selection
+        function setFormat(format) {
+            currentFormat = format;
+            const jpgBtn = document.getElementById('fmt-jpg');
+            const pngBtn = document.getElementById('fmt-png');
+            
+            if (format === 'jpeg') {
+                jpgBtn.classList.add('bg-blue-600', 'text-white', 'shadow-sm');
+                jpgBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+                pngBtn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm');
+                pngBtn.classList.add('text-gray-600', 'hover:bg-gray-100');
+            } else {
+                pngBtn.classList.add('bg-blue-600', 'text-white', 'shadow-sm');
+                pngBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+                jpgBtn.classList.remove('bg-blue-600', 'text-white', 'shadow-sm');
+                jpgBtn.classList.add('text-gray-600', 'hover:bg-gray-100');
+            }
+        }
+
+        function generatePlaceholders(numPages) {
+            previewGrid.innerHTML = '';
+            for (let i = 1; i <= numPages; i++) {
+                const div = document.createElement('div');
+                div.className = 'bg-white rounded-lg border border-gray-200 shadow-sm p-3 flex flex-col items-center';
+                div.innerHTML = `
+                    <div class="w-full aspect-[1/1.4] bg-gray-100 rounded mb-3 flex items-center justify-center relative overflow-hidden group">
+                        <span class="text-gray-400 font-medium">Page ${i}</span>
+                        <img id="img-preview-${i}" class="absolute inset-0 w-full h-full object-contain hidden transition-opacity duration-300" />
+                        <div id="loader-${i}" class="hidden absolute inset-0 bg-white/80 flex items-center justify-center">
+                            <div class="loader"></div>
+                        </div>
+                    </div>
+                    <div class="w-full flex justify-between items-center px-1">
+                        <span class="text-xs font-semibold text-gray-500">Page ${i}</span>
+                        <button disabled id="dl-btn-${i}" class="text-gray-300 text-xs hover:text-blue-600 transition-colors">
+                            <i class="fa-solid fa-download"></i>
+                        </button>
+                    </div>
+                `;
+                previewGrid.appendChild(div);
+            }
+        }
+
+        // Conversion Logic
+        convertBtn.addEventListener('click', startConversion);
+        cancelBtn.addEventListener('click', () => { cancelConversion = true; });
+        resetBtn.addEventListener('click', resetApp);
+        downloadZipBtn.addEventListener('click', downloadZip);
+
+        async function startConversion() {
+            if (isConverting || !pdfDoc) return;
+            
+            isConverting = true;
+            cancelConversion = false;
+            convertBtn.classList.add('hidden');
+            cancelBtn.classList.remove('hidden');
+            progressContainer.classList.remove('hidden');
+            downloadAllContainer.classList.add('hidden');
+            
+            // Reset Zip
+            zip = new JSZip();
+
+            const scale = parseFloat(document.getElementById('scale-select').value);
+            const totalPages = pdfDoc.numPages;
+            let processedCount = 0;
+
+            // Prepare Queue
+            const pagesQueue = Array.from({length: totalPages}, (_, i) => i + 1);
+
+            // Worker Loop
+            const processQueue = async () => {
+                while (pagesQueue.length > 0 && !cancelConversion) {
+                    const pageNum = pagesQueue.shift();
+                    
+                    // Show spinner for this page
+                    const loader = document.getElementById(`loader-${pageNum}`);
+                    if(loader) loader.classList.remove('hidden');
+
+                    try {
+                        await processPage(pageNum, scale);
+                        processedCount++;
+                        updateProgress(processedCount, totalPages);
+                    } catch (err) {
+                        console.error(`Error processing page ${pageNum}:`, err);
+                        // Optionally hide loader if error
+                        if(loader) loader.classList.add('hidden');
+                    }
+                }
+            };
+
+            // Launch Workers (Parallel Execution)
+            const workers = [];
+            const numWorkers = Math.min(CONCURRENCY, totalPages);
+            for (let i = 0; i < numWorkers; i++) {
+                workers.push(processQueue());
+            }
+
+            await Promise.all(workers);
+
+            // Cleanup & Finish
+            isConverting = false;
+            cancelBtn.classList.add('hidden');
+            convertBtn.classList.remove('hidden');
+            convertBtn.innerHTML = `<span>Convert Again</span><i class="fa-solid fa-rotate-right"></i>`;
+            
+            if (!cancelConversion) {
+                progressText.textContent = "Conversion Complete!";
+                downloadAllContainer.classList.remove('hidden');
+                downloadAllContainer.scrollIntoView({ behavior: 'smooth' });
+            } else {
+                progressText.textContent = "Conversion Cancelled.";
+            }
+        }
+
+        async function processPage(pageNum, scale) {
+             // Create dynamic canvas (crucial for parallel processing)
+             const tempCanvas = document.createElement('canvas');
+             const tempCtx = tempCanvas.getContext('2d');
+             
+             const page = await pdfDoc.getPage(pageNum);
+             const viewport = page.getViewport({ scale: scale });
+             
+             tempCanvas.height = viewport.height;
+             tempCanvas.width = viewport.width;
+
+             const renderContext = {
+                 canvasContext: tempCtx,
+                 viewport: viewport
+             };
+
+             // Render PDF page to canvas
+             await page.render(renderContext).promise;
+
+             // Convert to Blob
+             const quality = currentFormat === 'jpeg' ? 0.8 : 1.0; 
+             const mimeType = currentFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+             
+             const blob = await new Promise(resolve => tempCanvas.toBlob(resolve, mimeType, quality));
+             
+             // Optimization: Use Blob URL for preview instead of DataURL (Base64)
+             // Base64 freezes UI on large images; Blob URL does not.
+             const previewUrl = URL.createObjectURL(blob);
+
+             // Add to Zip
+             const ext = currentFormat === 'jpeg' ? 'jpg' : 'png';
+             const pageNumStr = String(pageNum).padStart(3, '0');
+             const filename = `${currentFile.name.replace(/\.pdf$/i, '')}_page_${pageNumStr}.${ext}`;
+             
+             zip.file(filename, blob);
+
+             // Update UI for this page
+             if (!cancelConversion) {
+                 const imgEl = document.getElementById(`img-preview-${pageNum}`);
+                 const loader = document.getElementById(`loader-${pageNum}`);
+                 const dlBtn = document.getElementById(`dl-btn-${pageNum}`);
+                 
+                 if(imgEl) {
+                     imgEl.onload = () => { URL.revokeObjectURL(imgEl.src); }; // Cleanup previous if any
+                     imgEl.src = previewUrl;
+                     imgEl.classList.remove('hidden');
+                 }
+                 if(loader) loader.classList.add('hidden');
+                 
+                 if(dlBtn) {
+                     dlBtn.disabled = false;
+                     dlBtn.classList.remove('text-gray-300');
+                     dlBtn.classList.add('text-gray-600', 'cursor-pointer');
+                     // Note: We need to clone the blob or create a new object URL for download if we revoke the previous one too early.
+                     // A safe bet here is just using the generic saveAs helper which creates a fresh URL.
+                     dlBtn.onclick = () => saveAs(blob, filename);
+                 }
+             }
+
+             // Clean up memory
+             page.cleanup();
+             tempCanvas.width = 0; 
+             tempCanvas.height = 0;
+             tempCanvas.remove();
+        }
+
+        function updateProgress(current, total) {
+            const percent = Math.round((current / total) * 100);
+            progressBar.style.width = `${percent}%`;
+            progressPercent.textContent = `${percent}%`;
+            progressText.textContent = `Processing page ${current} of ${total}...`;
+        }
+
+        async function downloadZip() {
+            const btn = document.getElementById('download-zip-btn');
+            const originalContent = btn.innerHTML;
+            
+            try {
+                // Visual feedback for Zipping
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-wait');
+                
+                const content = await zip.generateAsync({
+                    type: "blob",
+                    compression: "STORE", // No compression = Faster + Less Memory Usage
+                    streamFiles: true 
+                }, (metadata) => {
+                    btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin"></i> Zipping ${metadata.percent.toFixed(0)}%`;
+                });
+
+                const safeName = currentFile ? currentFile.name.replace(/\.pdf$/i, '') : 'document';
+                saveAs(content, `${safeName}_images.zip`);
+            } catch (error) {
+                console.error("Zip Error:", error);
+                alert("Error creating ZIP. The total size might be too large for your browser's memory.");
+            } finally {
+                // Restore button state
+                btn.disabled = false;
+                btn.classList.remove('opacity-75', 'cursor-wait');
+                btn.innerHTML = originalContent;
+            }
+        }
+
+        // Helper: Save Blob
+        function saveAs(blob, filename) {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        }
+
+        // Helper: Format Bytes
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        function resetUI() {
+            previewGrid.innerHTML = '';
+            progressContainer.classList.add('hidden');
+            downloadAllContainer.classList.add('hidden');
+            progressBar.style.width = '0%';
+            convertBtn.innerHTML = `<span>Convert All Pages</span><i class="fa-solid fa-bolt"></i>`;
+        }
+
+        function resetApp() {
+            currentFile = null;
+            pdfDoc = null;
+            fileInput.value = '';
+            uploadSection.classList.remove('hidden');
+            processingUi.classList.add('hidden');
+            resetUI();
+        }
+
+    </script>
+</body>
+</html>
